@@ -32,7 +32,7 @@ contract Chain is Ownable, ReentrancyGuard {
     uint256 private decimal;
     uint256 private startTime;
     address public treasurer;
-    IERC20 public immutable token;
+    IERC20 public token;
 
     constructor(IERC20 _token, address _treasurer) {
         treasurer = _treasurer;
@@ -85,10 +85,6 @@ contract Chain is Ownable, ReentrancyGuard {
                 bonusPercentage = 5;
             } else if (i==3) {
                 bonusPercentage = 4;
-            } else if (i==4) {
-                bonusPercentage = 2;
-            } else if (i >= 5 && i<= 19) {
-                bonusPercentage = 1;
             } else {
                 bonusPercentage = 2;
             }
