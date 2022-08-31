@@ -24,6 +24,7 @@ contract Chain is Ownable, ReentrancyGuard {
 
     mapping(bytes32 => User) public users;
     mapping(address => bytes32) public referralLink;
+    mapping(address => bool) public blacklist;
 
     uint24 private constant DAY = 86400;
     bytes32 private constant ZERO_BYTES32 = 0x0000000000000000000000000000000000000000000000000000000000000000;
@@ -41,7 +42,13 @@ contract Chain is Ownable, ReentrancyGuard {
         decimal = token.decimals();
     }
 
+    function blacklistUser(address _add, bool _blacklist) external onlyOwner {
+        require(blacklist[_add] != _blacklist, "invalid");
+        blacklist[_add] = _blacklist;
+    }
+
     function setTreasurer(address _treasurer) public onlyOwner {
+        require(_treasurer != address(0), "zero address");
         treasurer = _treasurer;
     }
 
@@ -75,7 +82,7 @@ contract Chain is Ownable, ReentrancyGuard {
         uint8 bonusPercentage;
         uint bonus;
         for(uint i = 0; i < 40; i++) {
-            if (link == ZERO_BYTES32) break;
+            if (userLink == ZERO_BYTES32) break;
             user = users[userLink];
             if(i==0) {
                 bonusPercentage = 20;
@@ -92,6 +99,7 @@ contract Chain is Ownable, ReentrancyGuard {
             bonus = (amountInWei * bonusPercentage)/100;
             user.referralReward += bonus;
             userLink = user.referred;
+            if (i == user.referredCount) user.referredCount += 1;
         }
     }
 
@@ -101,10 +109,12 @@ contract Chain is Ownable, ReentrancyGuard {
 
         User storage user = users[referralLink[addr]];
 
+        user.reward = _totalReward(user.link);
+
         user.deposited += requiredAmountInWei;
         user.timestamp = block.timestamp;
 
-        _distributeBonus(referralLink[addr], requiredAmountInWei);
+        // _distributeBonus(referralLink[addr], requiredAmountInWei);
     }
 
     function _invest(uint256 amount) internal returns(uint256) {
@@ -146,6 +156,7 @@ contract Chain is Ownable, ReentrancyGuard {
     }
 
     function claim() public {
+        require(blacklist[msg.sender] == true, "blacklisted");
         User storage user = users[referralLink[msg.sender]];
         require(user.deposited != 0, "No Deposits");
         require(((block.timestamp - user.timestamp)/DAY) > 0, "Too Early");
