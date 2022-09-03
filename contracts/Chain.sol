@@ -5,6 +5,8 @@ import "./interfaces/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
+import "hardhat/console.sol";
+
 contract Chain is Ownable, ReentrancyGuard {
     event Invested(address indexed investor, uint256 timestamp);
     event Withdrawn(address indexed withdrawer, uint256 amount, uint256 timestamp);
@@ -29,7 +31,7 @@ contract Chain is Ownable, ReentrancyGuard {
     uint24 private constant DAY = 86400;
     bytes32 private constant ZERO_BYTES32 = 0x0000000000000000000000000000000000000000000000000000000000000000;
 
-    uint256[] private collections;
+    uint256[] public collections = new uint256[](65535);
     uint256 private decimal;
     uint256 private startTime;
     address public treasurer;
@@ -133,7 +135,11 @@ contract Chain is Ownable, ReentrancyGuard {
             "Insuff"
         );
 
-        collections[index] += requiredAmountInWei;
+        uint256 oneDayCollection = collections[index] + requiredAmountInWei;
+        console.log(oneDayCollection);
+        console.log(requiredAmountInWei);
+        console.log(collections[index]);
+        // collections[index] = oneDayCollection;
         uint256 leftover = newBalance - (previousBalance + requiredAmountInWei);
         if (leftover > 0) token.transfer(msg.sender, leftover);
 
@@ -211,3 +217,5 @@ contract Chain is Ownable, ReentrancyGuard {
         emit Withdrawn(withdrawer, amount, block.timestamp);
     }
 }
+
+// 0x0000000000000000000000000000000000000000000000000000000000000000
