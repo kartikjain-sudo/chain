@@ -22,7 +22,7 @@ contract Chain is Ownable, ReentrancyGuard {
         bytes32 referred;
     }
 
-    mapping(bytes32 => User) public users;
+    mapping(bytes32 => User) private users;
     mapping(address => bytes32) public referralLink;
     mapping(address => bool) public blacklist;
 
@@ -213,5 +213,28 @@ contract Chain is Ownable, ReentrancyGuard {
 
     function dailyCollection(uint16 index) public view onlyOwner returns(uint256){
         return collections[index];
+    }
+
+    function userDetails(address _add) public view returns (
+        uint256 deposited,
+        uint256 timestamp,
+        uint256 referralReward,
+        uint256 claimed,
+        uint256 reward,
+        address addr, 
+        bytes32 link,
+        uint256 referredCount,
+        bytes32 referred
+    ) {
+        User memory user = users[referralLink[_add]];
+        deposited = user.deposited;
+        timestamp = user.timestamp;
+        referralReward = user.referralReward;
+        reward = user.reward;
+        claimed = user.claimed;
+        addr = user.addr;
+        link = user.link;
+        referredCount = user.referredCount;
+        referred = user.referred;
     }
 }
