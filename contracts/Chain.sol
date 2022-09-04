@@ -19,12 +19,14 @@ contract Chain is Ownable, ReentrancyGuard {
         address addr;
         bytes32 link;
         uint referredCount;
+        uint directCount;
         bytes32 referred;
     }
 
     mapping(bytes32 => User) private users;
     mapping(address => bytes32) public referralLink;
     mapping(address => bool) public blacklist;
+    mapping(bytes32 => uint32) private directRefrralTime;
 
     uint24 private constant DAY = 86400;
     bytes32 private constant ZERO_BYTES32 = 0x0000000000000000000000000000000000000000000000000000000000000000;
@@ -54,12 +56,12 @@ contract Chain is Ownable, ReentrancyGuard {
 
     function addReferral(address addr, uint256 amount, bytes32 referral) external nonReentrant {
         require(referralLink[addr] == ZERO_BYTES32, "already a member");
-        require(users[referral].addr != address(0) || referral == ZERO_BYTES32, "Invalid referrral");
-
-        uint256 requiredAmountInWei = _invest(amount);
+        require(users[referral].addr == msg.sender || referral == ZERO_BYTES32, "Invalid referrral");
 
         bytes32 link = keccak256(abi.encode(addr, referral));
         referralLink[addr] = link;
+
+        uint256 requiredAmountInWei = _invest(addr, amount, referral);
 
         users[link] = User({
             deposited: requiredAmountInWei,
@@ -70,6 +72,7 @@ contract Chain is Ownable, ReentrancyGuard {
             addr: addr,
             link: link,
             referredCount: 0,
+            directCount: 0,
             referred: referral
         });
 
@@ -78,6 +81,7 @@ contract Chain is Ownable, ReentrancyGuard {
 
     function _distributeBonus(bytes32 link, uint256 amountInWei) internal {
         bytes32 userLink = link;
+        uint32 currentTime = uint32(block.timestamp);
         User storage user;
         uint8 bonusPercentage;
         uint bonus;
@@ -97,7 +101,7 @@ contract Chain is Ownable, ReentrancyGuard {
             }
 
             bonus = (amountInWei * bonusPercentage)/100;
-            user.referralReward += bonus;
+            if (((currentTime - directRefrralTime[link])/DAY) <= 30) user.referralReward += bonus;
             userLink = user.referred;
             if (i == user.referredCount) user.referredCount += 1;
         }
@@ -105,7 +109,7 @@ contract Chain is Ownable, ReentrancyGuard {
 
     function topup(address addr, uint256 amount) external nonReentrant {
         require(users[referralLink[addr]].addr != address(0), "Invalid address");
-        uint256 requiredAmountInWei = _invest(amount);
+        uint256 requiredAmountInWei = _invest(addr, amount, referralLink[addr]);
 
         User storage user = users[referralLink[addr]];
 
@@ -117,7 +121,7 @@ contract Chain is Ownable, ReentrancyGuard {
         // _distributeBonus(referralLink[addr], requiredAmountInWei);
     }
 
-    function _invest(uint256 amount) internal returns(uint256) {
+    function _invest(address addr, uint256 amount, bytes32 link) internal returns(uint256) {
         require(amount >= 100, "Too Low");
         uint256 amountInWei = amount * (10**decimal);
         uint256 requiredAmountInWei = ((amount / 100) * 100) * (10**decimal);
@@ -133,11 +137,16 @@ contract Chain is Ownable, ReentrancyGuard {
             "Insuff"
         );
 
+        if (link != ZERO_BYTES32) {
+            directRefrralTime[link] = uint32(block.timestamp);
+            users[link].directCount += 1;
+        }
+
         collections[index] += requiredAmountInWei;
         uint256 leftover = newBalance - (previousBalance + requiredAmountInWei);
         if (leftover > 0) token.transfer(msg.sender, leftover);
 
-        emit Invested(msg.sender, block.timestamp);
+        emit Invested(addr, block.timestamp);
         return requiredAmountInWei;
     }
 
