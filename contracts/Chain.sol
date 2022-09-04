@@ -5,8 +5,6 @@ import "./interfaces/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-import "hardhat/console.sol";
-
 contract Chain is Ownable, ReentrancyGuard {
     event Invested(address indexed investor, uint256 timestamp);
     event Withdrawn(address indexed withdrawer, uint256 amount, uint256 timestamp);
@@ -31,17 +29,17 @@ contract Chain is Ownable, ReentrancyGuard {
     uint24 private constant DAY = 86400;
     bytes32 private constant ZERO_BYTES32 = 0x0000000000000000000000000000000000000000000000000000000000000000;
 
-    uint256[] public collections = new uint256[](65535);
-    uint256 private decimal;
+    mapping(uint16 => uint256) private collections;
+    uint256 private immutable decimal;
     uint256 private startTime;
     address public treasurer;
-    IERC20 public token;
+    IERC20 public immutable token;
 
     constructor(IERC20 _token, address _treasurer) {
         treasurer = _treasurer;
         token = _token;
         startTime = (block.timestamp/DAY) * DAY;
-        decimal = token.decimals();
+        decimal = _token.decimals();
     }
 
     function blacklistUser(address _add, bool _blacklist) external onlyOwner {
@@ -135,11 +133,7 @@ contract Chain is Ownable, ReentrancyGuard {
             "Insuff"
         );
 
-        uint256 oneDayCollection = collections[index] + requiredAmountInWei;
-        console.log(oneDayCollection);
-        console.log(requiredAmountInWei);
-        console.log(collections[index]);
-        // collections[index] = oneDayCollection;
+        collections[index] += requiredAmountInWei;
         uint256 leftover = newBalance - (previousBalance + requiredAmountInWei);
         if (leftover > 0) token.transfer(msg.sender, leftover);
 
@@ -162,7 +156,7 @@ contract Chain is Ownable, ReentrancyGuard {
     }
 
     function claim() public {
-        require(blacklist[msg.sender] == true, "blacklisted");
+        require(blacklist[msg.sender] == false, "blacklisted");
         User storage user = users[referralLink[msg.sender]];
         require(user.deposited != 0, "No Deposits");
         require(((block.timestamp - user.timestamp)/DAY) > 0, "Too Early");
@@ -216,6 +210,8 @@ contract Chain is Ownable, ReentrancyGuard {
         token.transfer(withdrawer, amount);
         emit Withdrawn(withdrawer, amount, block.timestamp);
     }
-}
 
-// 0x0000000000000000000000000000000000000000000000000000000000000000
+    function dailyCollection(uint16 index) public view onlyOwner returns(uint256){
+        return collections[index];
+    }
+}
