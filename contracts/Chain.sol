@@ -232,6 +232,7 @@ contract Chain is Ownable, ReentrancyGuard {
         uint256 reward,
         address addr, 
         bytes32 link,
+        uint directCount,
         uint256 referredCount,
         bytes32 referred
     ) {
@@ -243,6 +244,7 @@ contract Chain is Ownable, ReentrancyGuard {
         claimed = user.claimed;
         addr = user.addr;
         link = user.link;
+        directCount = user.directCount;
         referredCount = user.referredCount;
         referred = user.referred;
     }
