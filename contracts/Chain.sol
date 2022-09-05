@@ -161,7 +161,7 @@ contract Chain is Ownable, ReentrancyGuard {
         uint256 dailyReward = (user.deposited * 5)/1000;
         uint16 time = uint16((block.timestamp - user.timestamp)/DAY);
 
-        return ((dailyReward * time) + user.referralReward + user.reward);
+        return ((dailyReward * time) + user.reward);
     }
 
     function myRewards() public view returns(uint256) {
@@ -177,7 +177,7 @@ contract Chain is Ownable, ReentrancyGuard {
         require(((block.timestamp - user.timestamp)/DAY) > 0, "Too Early");
         
         user.reward = _totalReward(user.link);
-        uint256 amountToClaim = user.reward - user.claimed;
+        uint256 amountToClaim = user.reward + user.referralReward - user.claimed;
         user.claimed += amountToClaim;
     
         token.transfer(msg.sender, amountToClaim);
