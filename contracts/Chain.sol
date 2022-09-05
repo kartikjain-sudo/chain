@@ -31,6 +31,8 @@ contract Chain is Ownable, ReentrancyGuard {
     uint24 private constant DAY = 86400;
     bytes32 private constant ZERO_BYTES32 = 0x0000000000000000000000000000000000000000000000000000000000000000;
 
+    bool public thirtyDayRewardPolicy;
+
     mapping(uint16 => uint256) private collections;
     uint256 private immutable decimal;
     uint256 private startTime;
@@ -52,6 +54,10 @@ contract Chain is Ownable, ReentrancyGuard {
     function setTreasurer(address _treasurer) public onlyOwner {
         require(_treasurer != address(0), "zero address");
         treasurer = _treasurer;
+    }
+
+    function setThirtyDayRewardPolicy() external onlyOwner {
+        thirtyDayRewardPolicy = !thirtyDayRewardPolicy;
     }
 
     function addReferral(address addr, uint256 amount, bytes32 referral) external nonReentrant {
@@ -101,7 +107,7 @@ contract Chain is Ownable, ReentrancyGuard {
             }
 
             bonus = (amountInWei * bonusPercentage)/100;
-            if (((currentTime - directRefrralTime[link])/DAY) <= 30) user.referralReward += bonus;
+            if ((!thirtyDayRewardPolicy || (((currentTime - directRefrralTime[link])/DAY) <= 30)) && ((user.directCount * 4)<=i)) user.referralReward += bonus;
             userLink = user.referred;
             if (i == user.referredCount) user.referredCount += 1;
         }
@@ -109,7 +115,7 @@ contract Chain is Ownable, ReentrancyGuard {
 
     function topup(address addr, uint256 amount) external nonReentrant {
         require(users[referralLink[addr]].addr != address(0), "Invalid address");
-        uint256 requiredAmountInWei = _invest(addr, amount, referralLink[addr]);
+        uint256 requiredAmountInWei = _invest(addr, amount, ZERO_BYTES32);
 
         User storage user = users[referralLink[addr]];
 
