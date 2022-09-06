@@ -107,7 +107,7 @@ contract Chain is Ownable, ReentrancyGuard {
             }
 
             bonus = (amountInWei * bonusPercentage)/100;
-            if ((!thirtyDayRewardPolicy || (((currentTime - directRefrralTime[link])/DAY) <= 30)) && ((user.directCount * 4)<=i)) user.referralReward += bonus;
+            if ((!thirtyDayRewardPolicy || (((currentTime - directRefrralTime[link])/DAY) <= 30)) && ((user.directCount * 4)>i)) user.referralReward += bonus;
             userLink = user.referred;
             if (i == user.referredCount) user.referredCount += 1;
         }
