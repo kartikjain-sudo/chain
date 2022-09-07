@@ -17,20 +17,25 @@ contract Chain is Ownable, ReentrancyGuard {
         uint256 reward;
         uint256 claimed;
         address addr;
-        bytes32 link;
-        uint referredCount;
-        uint directCount;
-        bytes32 referred;
+        uint256 longestCount;
+        uint256 referredCount;
+        uint256 directCount;
+        address referred;
     }
 
-    mapping(bytes32 => User) private users;
-    mapping(address => bytes32) public referralLink;
+    struct UserPrivateData {
+        uint256 referalDeposited;
+        uint32 directRefrralTime;
+        mapping(address => uint8) shareRatio;
+    }
+
+    mapping(address => User) private users;
+    mapping(address => UserPrivateData) private userPrivateData;
+
     mapping(address => bool) public blacklist;
-    mapping(bytes32 => uint32) private directRefrralTime;
+    mapping(address => bool) public canWithdraw;
 
     uint24 private constant DAY = 86400;
-    bytes32 private constant ZERO_BYTES32 = 0x0000000000000000000000000000000000000000000000000000000000000000;
-
     bool public thirtyDayRewardPolicy;
 
     mapping(uint16 => uint256) private collections;
@@ -51,32 +56,30 @@ contract Chain is Ownable, ReentrancyGuard {
         blacklist[_add] = _blacklist;
     }
 
+    function blacklistUserWithdrawal(address _add, bool _blacklist) external onlyOwner {
+        require(canWithdraw[_add] != _blacklist, "invalid");
+        canWithdraw[_add] = _blacklist;
+    }
+
     function setTreasurer(address _treasurer) public onlyOwner {
         require(_treasurer != address(0), "zero address");
         treasurer = _treasurer;
     }
 
-    function setThirtyDayRewardPolicy() external onlyOwner {
-        thirtyDayRewardPolicy = !thirtyDayRewardPolicy;
-    }
-
-    function addReferral(address addr, uint256 amount, bytes32 referral) external nonReentrant {
-        require(referralLink[addr] == ZERO_BYTES32, "already a member");
-        require(users[referral].addr == msg.sender || referral == ZERO_BYTES32, "Invalid referrral");
-
-        bytes32 link = keccak256(abi.encode(addr, referral));
-        referralLink[addr] = link;
+    function addReferral(address addr, uint256 amount, address referral) external nonReentrant {
+        require(users[addr].addr != address(0), "already a member");
+        require(users[referral].deposited > 0 || referral == address(0), "Invalid referrral");
 
         uint256 requiredAmountInWei = _invest(addr, amount, referral);
 
-        users[link] = User({
+        users[addr] = User({
             deposited: requiredAmountInWei,
             timestamp: block.timestamp,
             referralReward: 0,
             reward: 0,
             claimed: 0,
+            longestCount: 0,
             addr: addr,
-            link: link,
             referredCount: 0,
             directCount: 0,
             referred: referral
@@ -85,14 +88,14 @@ contract Chain is Ownable, ReentrancyGuard {
         _distributeBonus(referral, requiredAmountInWei);
     }
 
-    function _distributeBonus(bytes32 link, uint256 amountInWei) internal {
-        bytes32 userLink = link;
+    function _distributeBonus(address link, uint256 amountInWei) internal {
+        address userLink = link;
         uint32 currentTime = uint32(block.timestamp);
         User storage user;
         uint8 bonusPercentage;
         uint bonus;
         for(uint i = 0; i < 40; i++) {
-            if (userLink == ZERO_BYTES32) break;
+            if (userLink == address(0)) break;
             user = users[userLink];
             if(i==0) {
                 bonusPercentage = 20;
@@ -107,27 +110,28 @@ contract Chain is Ownable, ReentrancyGuard {
             }
 
             bonus = (amountInWei * bonusPercentage)/100;
-            if ((!thirtyDayRewardPolicy || (((currentTime - directRefrralTime[link])/DAY) <= 30)) && ((user.directCount * 4)>i)) user.referralReward += bonus;
+            if ((!thirtyDayRewardPolicy || (((currentTime - userPrivateData[link].directRefrralTime)/DAY) <= 30)) && ((user.directCount * 4)>i)) user.referralReward += bonus;
             userLink = user.referred;
-            if (i == user.referredCount) user.referredCount += 1;
+            if (i == user.longestCount) user.longestCount += 1;
+            user.referredCount++;
         }
     }
 
     function topup(address addr, uint256 amount) external nonReentrant {
-        require(users[referralLink[addr]].addr != address(0), "Invalid address");
-        uint256 requiredAmountInWei = _invest(addr, amount, ZERO_BYTES32);
+        require(users[addr].deposited > 0, "Invalid address");
+        uint256 requiredAmountInWei = _invest(addr, amount, users[addr].referred);
 
-        User storage user = users[referralLink[addr]];
+        User storage user = users[addr];
 
-        user.reward = _totalReward(user.link);
+        user.reward = _totalReward(user.addr);
 
         user.deposited += requiredAmountInWei;
         user.timestamp = block.timestamp;
 
-        // _distributeBonus(referralLink[addr], requiredAmountInWei);
+        _distributeBonus(user.addr, requiredAmountInWei);
     }
 
-    function _invest(address addr, uint256 amount, bytes32 link) internal returns(uint256) {
+    function _invest(address addr, uint256 amount, address link) internal returns(uint256) {
         require(amount >= 100, "Too Low");
         uint256 amountInWei = amount * (10**decimal);
         uint256 requiredAmountInWei = ((amount / 100) * 100) * (10**decimal);
@@ -143,8 +147,8 @@ contract Chain is Ownable, ReentrancyGuard {
             "Insuff"
         );
 
-        if (link != ZERO_BYTES32) {
-            directRefrralTime[link] = uint32(block.timestamp);
+        if (link != address(0)) {
+            userPrivateData[link].directRefrralTime = uint32(block.timestamp);
             users[link].directCount += 1;
         }
 
@@ -156,7 +160,7 @@ contract Chain is Ownable, ReentrancyGuard {
         return requiredAmountInWei;
     }
 
-    function _totalReward(bytes32 link) internal view returns(uint256) {
+    function _totalReward(address link) internal view returns(uint256) {
         User storage user = users[link];
         uint256 dailyReward = (user.deposited * 5)/1000;
         uint16 time = uint16((block.timestamp - user.timestamp)/DAY);
@@ -164,19 +168,20 @@ contract Chain is Ownable, ReentrancyGuard {
         return ((dailyReward * time) + user.reward);
     }
 
-    function myRewards() public view returns(uint256) {
-        User memory user = users[referralLink[msg.sender]];
-        uint256 reward = _totalReward(user.link);
+    function myRewards(address addr) public view returns(uint256) {
+        User memory user = users[addr];
+        if (blacklist[addr] == true) return 0;
+        uint256 reward = _totalReward(addr);
         return reward - user.claimed;
     }
 
     function claim() public {
         require(blacklist[msg.sender] == false, "blacklisted");
-        User storage user = users[referralLink[msg.sender]];
+        User storage user = users[msg.sender];
         require(user.deposited != 0, "No Deposits");
         require(((block.timestamp - user.timestamp)/DAY) > 0, "Too Early");
         
-        user.reward = _totalReward(user.link);
+        user.reward = _totalReward(user.addr);
         uint256 amountToClaim = user.reward + user.referralReward - user.claimed;
         user.claimed += amountToClaim;
     
@@ -188,18 +193,22 @@ contract Chain is Ownable, ReentrancyGuard {
     // NOTICE: Here user can withdraw any sum of amount, not compulsory 
     // to be the multiple of 100
     function withdraw(uint256 amount) public nonReentrant {
-
+        require(canWithdraw[msg.sender] == true || msg.sender == treasurer, "Not Allowed");
         uint256 amountInWei = amount * (10 ** decimal);
-        User memory user = users[referralLink[msg.sender]];
+        User memory user = users[msg.sender];
         if (msg.sender == treasurer) {
             _withdraw(treasurer, amountInWei);
         } else {
             require(user.deposited >= amount, "Low Balance");
+            require(amount >= 10, "Too Low");
 
-            uint256 adminAmountInWei = ((amountInWei * 10) / 100);
+            uint256 adminAmountInWei = (amountInWei / 10);
             uint256 userAmountInWei = amountInWei - adminAmountInWei;
 
-            uint256 rewardsAccumulated = _totalReward(user.link);
+            uint256 rewardsAccumulated;
+
+            if (blacklist[msg.sender] == false) rewardsAccumulated = _totalReward(user.addr);
+            else rewardsAccumulated = user.reward;
 
             user.deposited -= amountInWei;
             user.timestamp = block.timestamp;
@@ -215,7 +224,7 @@ contract Chain is Ownable, ReentrancyGuard {
             uint256 totalAmount = token.balanceOf(address(this));
             _withdraw(treasurer, totalAmount);
         } else {
-            withdraw(users[referralLink[msg.sender]].deposited);
+            withdraw(users[msg.sender].deposited);
         }
     }
 
@@ -236,20 +245,20 @@ contract Chain is Ownable, ReentrancyGuard {
         uint256 referralReward,
         uint256 claimed,
         uint256 reward,
-        address addr, 
-        bytes32 link,
-        uint directCount,
+        uint256 longestCount,
+        address addr,
+        uint256 directCount,
         uint256 referredCount,
-        bytes32 referred
+        address referred
     ) {
-        User memory user = users[referralLink[_add]];
+        User memory user = users[_add];
         deposited = user.deposited;
         timestamp = user.timestamp;
         referralReward = user.referralReward;
         reward = user.reward;
         claimed = user.claimed;
         addr = user.addr;
-        link = user.link;
+        longestCount = user.longestCount;
         directCount = user.directCount;
         referredCount = user.referredCount;
         referred = user.referred;
